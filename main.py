@@ -216,7 +216,23 @@ def mody_html(html, full_url):
                 tag["src"] = urljoin(SOLUTION_BASE_URL, tag["src"])
 
     return soup.prettify()
-
+   @bot.on(events.NewMessage(pattern=r"/url (https://u1\.oliveboard\.in/\S+)"))
+async def fetch_url(event):
+    if event.sender_id != OWNER_ID:
+        await event.reply("Not allowed")
+        return
+    url = event.pattern_match.group(1)
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
+        html = modify_html(response.text, url)
+        file_name = f"test_{event.id}.html"
+        with open(file_name, "w", encoding="utf-8") as f:
+            f.write(html)
+        await event.respond("Question paper", file=file_name)
+        os.remove(file_name)
+    except requests.exceptions.RequestException as e:
+        await event.respond(f"Failed: {e}")
 # Run the bot
 print("Bot started...")
 bot.run_until_disconnected()
