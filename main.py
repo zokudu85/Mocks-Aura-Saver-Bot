@@ -233,6 +233,20 @@ async def fetch_url(event):
         os.remove(file_name)
     except requests.exceptions.RequestException as e:
         await event.respond(f"Failed: {e}")
+
+from flask import Flask
+from threading import Thread
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "ok"
+
+def run_web():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
+Thread(target=run_web, daemon=True).start()
 # Run the bot
 print("Bot started...")
 bot.run_until_disconnected()
