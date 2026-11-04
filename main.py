@@ -216,7 +216,7 @@ def mody_html(html, full_url):
                 tag["src"] = urljoin(SOLUTION_BASE_URL, tag["src"])
 
     return soup.prettify()
-   @bot.on(events.NewMessage(pattern=r"/url (https://u1\.oliveboard\.in/\S+)"))
+@bot.on(events.NewMessage(pattern=r"/url (https://u1\.oliveboard\.in/\S+)"))
 async def fetch_url(event):
     if event.sender_id != OWNER_ID:
         await event.reply("Not allowed")
@@ -233,7 +233,6 @@ async def fetch_url(event):
         os.remove(file_name)
     except requests.exceptions.RequestException as e:
         await event.respond(f"Failed: {e}")
-
 from flask import Flask
 from threading import Thread
 
