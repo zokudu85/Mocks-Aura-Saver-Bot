@@ -67,7 +67,7 @@ BASE_URIS = {
     "ibpsclerk": "https://u1.oliveboard.in/exams/tests/part.php?c=ibpsclerk&testid={test_id}",
     "sbipo": "https://u1.oliveboard.in/exams/tests/part.php?c=sbipo&testid={test_id}",
     "sbiclerk": "https://u1.oliveboard.in/exams/tests/part.php?c=sbiclerk&testid={test_id}",
-    "rrbpo": "https://u1.oliveboard.in/exams/tests/part.php?c=rrbpo&testid={test_id}",
+    "rrbpo": "https://u1.oliveboard.in/tests/?c=ibpsrrbscp&i={test_id}",
     "rrbclerk": "https://u1.oliveboard.in/exams/tests/part.php?c=rrbclerk&testid={test_id}",
     "rrbassecpre": "https://u1.oliveboard.in/exams/tests/part.php?c=rrbassecpre&testid={test_id}",
     "rrbpolive": "https://u1.oliveboard.in/exams/tests/part.php?c=rrbpolive&testid={test_id}",
