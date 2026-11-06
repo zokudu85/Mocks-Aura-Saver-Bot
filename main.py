@@ -74,11 +74,11 @@ BASE_URIS = {
    "ibpsrrbasp": "https://u1.oliveboard.in/exams/exams/tests/?c=ibpsrrbasp&testid={test_id}",
     "ibpsrrbassmains": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbsecas&test_id={test_id}",
    "rrbclerk2025": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasp22&test_id={test_id}",
-   "rrbmains25mains": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasm&test_id={test_id}",
-   "rrbclerksectional": "https://u1.oliveboard.in/exams/tests/?c=sectional&test_id={test_id}",
-"rrbmainssec": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&test_id={test_id}",  
-  "sectestmains": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&testid={test_id}",
- "rrbpre": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbscp&testid={test_id}",
+    "rrbmains25mains": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasm&test_id={test_id}",
+    "rrbclerksectional": "https://u1.oliveboard.in/exams/tests/?c=sectional&test_id={test_id}",
+    "rrbmainssec": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&test_id={test_id}",  
+    "sectestmains": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&testid={test_id}",
+    "rrbpre": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbscp&testid={test_id}",
 }
 
 def get_page(url):
@@ -108,6 +108,7 @@ def file_name_for(html, exam, test_id):
     return f"{title}@Dark_V1rus.html"
 
 
+
 async def send_test(event, url, caption, exam, test_id):
     """Download a test page, rewrite its links, and send it as an HTML file."""
     try:
@@ -117,11 +118,12 @@ async def send_test(event, url, caption, exam, test_id):
         await event.respond(f"Failed to fetch test {test_id}: {e}")
         return "fail"
 
+  
     if urlparse(response.url).netloc != "u1.oliveboard.in":
         await event.respond("Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
         return "login"
 
-    file_name = file_name_for(response.text, exam, test_id)
+    file_name = file_name_for(response.text, exam, test_name)
     html = modify_html(response.text, url)
     with open(file_name, "w", encoding="utf-8") as f:
         f.write(html)
