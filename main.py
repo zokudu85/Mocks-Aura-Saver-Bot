@@ -51,7 +51,6 @@ HEADERS = {
     "sec-ch-ua-platform": '"Windows"',
 }
 
-
 # Base URIs for different exam types
 BASE_URIS = {
     "cgl1": "https://u1.oliveboard.in/exams/tests/?c=ssc2019&testid={test_id}",
@@ -98,14 +97,14 @@ def clean_name(text):
 
 
 def file_name_for(html, exam, test_id):
-    """File name: '<test name> @Dark_V1rus.html'. Order: TEST_NAMES, test title inside the page, exam + id."""
+    """File name: '<test name>@Dark_V1rus.html'. Order: TEST_NAMES, test title inside the page, exam + id."""
     names = {k.lower(): v for k, v in TEST_NAMES.items()}
     title = names.get(f"{exam} {test_id}".lower(), "")
     if not title:
         m = re.search(r"testQpid\s*=\s*'([^']+)'", html)
         title = m.group(1) if m else ""
     title = clean_name(title) or clean_name(f"{exam} {test_id}")
-    return f"{title} @Dark_V1rus.html"
+    return f"{title}@Dark_V1rus.html"
 
 
 async def send_test(event, url, caption, exam, test_id):
@@ -133,7 +132,7 @@ async def send_test(event, url, caption, exam, test_id):
 
 
 MAX_TESTS = 10     # max tests per /fetch command
-GAP_SECONDS = 4    # pause between tests (keeps Telegram and your Oliveboard account safe)
+GAP_SECONDS = 2    # pause between tests (keeps Telegram and your Oliveboard account safe)
 
 
 def parse_ids(text):
@@ -172,7 +171,7 @@ async def fetch_exam(event):
     for n, test_id in enumerate(ids, 1):
         url = BASE_URIS[exam].format(test_id=test_id)
         caption = (
-            f"**📕 Exam Name: {test_name}**\n**🆔 Test ID: {test_name}**\n"
+            f"**📕 Test Name: {test_id}**\n**🆔 Test ID: {test_id}**\n"
             f"**✅ Type: Question**\n\n__**Powered by @Dark_V1rus**__"
         )
         result = await send_test(event, url, caption, exam, test_id)
