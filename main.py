@@ -72,12 +72,13 @@ BASE_URIS = {
     "rrbclerk": "https://u1.oliveboard.in/exams/tests/?c=rrbclerk&testid={test_id}",
     "rrbassecpre": "https://u1.oliveboard.in/exams/tests/?c=rrbassecpre&testid={test_id}",
     "rrbpolive": "https://u1.oliveboard.in/exams/tests/?c=rrbpolive&testid={test_id}",
-   "ibpsrrbasp": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasp&testid={test_id}",
-    "ibpsrrbassmains": "https://u1.oliveboard.in/tests/?c=ibpsrrbsecas&test_id={test_id}",
-   "rrbclerk2025": "https://u1.oliveboard.in/tests/?c=ibpsrrbasp22&test_id={test_id}",
-   "rrbmains25mains": "https://u1.oliveboard.in/tests/?c=ibpsrrbasm&test_id={test_id}",
-   "rrbclerksectional": "https://u1.oliveboard.in/tests/?c=sectional&test_id={test_id}",
-"rrbmainssec": "https://u1.oliveboard.in/tests/?c=sectionalm&test_id={test_id}",  
+   "ibpsrrbasp": "https://u1.oliveboard.in/exams/exams/tests/?c=ibpsrrbasp&testid={test_id}",
+    "ibpsrrbassmains": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbsecas&test_id={test_id}",
+   "rrbclerk2025": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasp22&test_id={test_id}",
+   "rrbmains25mains": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasm&test_id={test_id}",
+   "rrbclerksectional": "https://u1.oliveboard.in/exams/tests/?c=sectional&test_id={test_id}",
+"rrbmainssec": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&test_id={test_id}",  
+  "sectestmains": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&testid={test_id}",
 }
 
 def get_page(url):
