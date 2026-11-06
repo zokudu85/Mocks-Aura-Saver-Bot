@@ -78,6 +78,7 @@ BASE_URIS = {
    "rrbclerksectional": "https://u1.oliveboard.in/exams/tests/?c=sectional&test_id={test_id}",
 "rrbmainssec": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&test_id={test_id}",  
   "sectestmains": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&testid={test_id}",
+ "rrbpre": "https://u1.oliveboard.in/exams/tests/part.php?c=ibpsrrbscp&testid={test_id}",
 }
 
 def get_page(url):
@@ -131,7 +132,7 @@ async def send_test(event, url, caption, exam, test_id):
     return "ok"
 
 
-MAX_TESTS = 10     # max tests per /fetch command
+MAX_TESTS = 30     # max tests per /fetch command
 GAP_SECONDS = 2    # pause between tests (keeps Telegram and your Oliveboard account safe)
 
 
@@ -171,7 +172,7 @@ async def fetch_exam(event):
     for n, test_id in enumerate(ids, 1):
         url = BASE_URIS[exam].format(test_id=test_id)
         caption = (
-            f"**📕 Test Name: {test_id}**\n**🆔 Test ID: {test_id}**\n"
+            f"**📕 Test Name: {test_name}**\n**🆔 Test ID: {test_id}**\n"
             f"**✅ Type: Question**\n\n__**Powered by @Dark_V1rus**__"
         )
         result = await send_test(event, url, caption, exam, test_id)
