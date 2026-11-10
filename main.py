@@ -1,4 +1,4 @@
-# Copyright github.com/devgaganin
+# Copyright github.com/devgagan
 
 import os
 import re
@@ -13,13 +13,15 @@ from flask import Flask
 from telethon import TelegramClient, events
 
 # ==========================================
-# 🔐 RENDER ENVIRONMENT VARIABLES SE DETAILS UTHA RAHE HAIN
+# 🔐 RENDER SE DETAILS UTHA RAHE HAIN
 # ==========================================
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 OWNER_ID = int(os.environ.get("OWNER_ID", 0))
-COOKIE = os.environ.get("COOKIE", "")
+
+# 👇 YAHAN AUTH_CODE KO HI COOKIE MAAN RAHE HAIN 👇
+COOKIE = os.environ.get("AUTH_CODE", "")
 
 # Initialize the Telethon client
 bot = TelegramClient("olive_bot", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
@@ -55,11 +57,10 @@ HEADERS = {
     "Cookie": FINAL_COOKIE
 }
 
-# Base URL for Exams (part.php waala)
 BASE_URIS = {
     "rrbpo": "https://u1.oliveboard.in/exams/tests/part.php?c=ibpsrrbscp&testid={test_id}",
     "ibpspo": "https://u1.oliveboard.in/exams/tests/part.php?c=ibpspo&testid={test_id}",
-    # Yahan aur exams add kar sakte ho
+    # Aur exams yahan add kar sakte ho
 }
 
 
@@ -80,30 +81,23 @@ def merge_sections(html1, html2):
     if not pane1 or not pane2:
         raise Exception("Questions nahi mil rahe.")
 
-    # Extract all question divs
     q_divs1 = pane1.find_all("div", class_="question-outer-div")
     q_divs2 = pane2.find_all("div", class_="question-outer-div")
 
     if not q_divs1 or not q_divs2:
          raise Exception("Question divs nahi mile.")
 
-    # Clear the first pane and add combined questions
     pane1.clear()
 
-    # Add Section 1 questions
     for div in q_divs1:
         pane1.append(div)
 
-    # Add Section 2 questions
     for div in q_divs2:
         pane1.append(div)
 
     total_questions = len(q_divs1) + len(q_divs2)
-    
-    # Update JS variables so page doesn't break
     pane1.insert(0, BeautifulSoup(f"<script>var firstQid=1; var nq={total_questions}; var lastQid=nq;</script>", "html.parser"))
 
-    # Update Title
     if soup1.title:
         soup1.title.string = "MERGED MOCK TEST"
 
@@ -111,11 +105,10 @@ def merge_sections(html1, html2):
 
 
 # ==========================================
-# SEND TEST FUNCTION (Fetch + Merge + Send)
+# SEND TEST FUNCTION
 # ==========================================
 async def send_test(event, url, exam, test_id):
     try:
-        # Step 1: Normal Fetch (Section 1)
         await event.respond(f"⏳ Test {test_id}: Fetching Section 1...")
         res1 = await asyncio.to_thread(get_page, url)
         
@@ -123,16 +116,13 @@ async def send_test(event, url, exam, test_id):
             await event.respond("❌ Cookie expire ho gayi hai. Nayi cookie daalo.")
             return "login"
 
-        # Step 2: Fetch with `&from=test` (Section 2)
         await event.respond(f"⏳ Test {test_id}: Fetching Section 2...")
         url2 = f"{url}&from=test"
         res2 = await asyncio.to_thread(get_page, url2)
 
-        # Step 3: Merge
         await event.respond(f"🧩 Test {test_id}: Merging both sections...")
         merged_html = merge_sections(res1.text, res2.text)
 
-        # Step 4: Apply Watermark
         final_soup = BeautifulSoup(merged_html, "html.parser")
         final_soup = apply_watermark(final_soup)
 
@@ -140,7 +130,6 @@ async def send_test(event, url, exam, test_id):
         with open(file_name, "w", encoding="utf-8") as f:
             f.write(str(final_soup))
 
-        # Step 5: Send
         await event.respond(f"✅ **Test ID: {test_id}**\n__Powered by Banking Aura__", file=file_name)
         os.remove(file_name)
         return "ok"
@@ -162,19 +151,16 @@ WATERMARK_HTML = """<style>
 <div id="ba-watermark"><span>BANKING AURA</span></div>"""
 
 def apply_watermark(soup):
-    # Fix Links
     for tag in soup.find_all(["a", "img", "link", "script"]):
         if tag.has_attr("href") and not tag["href"].startswith("http"):
             tag["href"] = urljoin(DEFAULT_BASE_URL, tag["href"])
         if tag.has_attr("src") and not tag["src"].startswith("http"):
             tag["src"] = urljoin(DEFAULT_BASE_URL, tag["src"])
 
-    # Remove onclick from links
     for a in soup.find_all("a"):
         if a.has_attr("onclick"):
             a["href"] = "javascript:void(0)"
 
-    # Add Watermark
     if soup.body and not soup.find(id="ba-watermark"):
         soup.body.append(BeautifulSoup(WATERMARK_HTML, "html.parser"))
 
@@ -206,7 +192,6 @@ async def fetch_exam(event):
         return
 
     url = BASE_URIS[exam].format(test_id=test_id)
-    
     status = await send_test(event, url, exam, test_id)
     
     if status == "ok":
