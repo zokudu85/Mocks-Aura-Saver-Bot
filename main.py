@@ -62,23 +62,24 @@ BASE_URIS = {
     "rrbalp1": "https://u1.oliveboard.in/exams/tests/?c=rrbalp1&os=1&testid={test_id}",
     "rrbalp2": "https://u1.oliveboard.in/exams/tests/?c=rrbalp2&os=1&testid={test_id}",
     "rrbgrpd": "https://u1.oliveboard.in/exams/tests/?c=rrbgrpd&os=1&testid={test_id}",
-    # Banking exams (c= codes NOT verified: check them against a real Oliveboard test URL)
-    "ibpspo": "https://u1.oliveboard.in/exams/tests/?c=ibpspo&testid={test_id}",
-    "ibpsclerk": "https://u1.oliveboard.in/exams/tests/?c=ibpsclerk&testid={test_id}",
-    "sbipo": "https://u1.oliveboard.in/exams/tests/?c=sbipo&testid={test_id}",
-    "sbiclerk": "https://u1.oliveboard.in/exams/tests/?c=sbiclerk&testid={test_id}",
-    "rrbpo": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbscp&testid={test_id}",
-    "rrbclerk": "https://u1.oliveboard.in/exams/tests/?c=rrbclerk&testid={test_id}",
-    "rrbassecpre": "https://u1.oliveboard.in/exams/tests/?c=rrbassecpre&testid={test_id}",
-    "rrbpolive": "https://u1.oliveboard.in/exams/tests/?c=rrbpolive&testid={test_id}",
-   "ibpsrrbasp": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasp&testid={test_id}",
-    "ibpsrrbassmains": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbsecas&testid={test_id}",
-   "rrbclerk2025": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasp22&testid={test_id}",
-    "rrbmains25mains": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasm&testid={test_id}",
-    "rrbclerksectional": "https://u1.oliveboard.in/exams/tests/?c=sectional&testid={test_id}",
-    "rrbmainssec": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&testid={test_id}",  
-    "sectestmains": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&testid={test_id}",
+    # Banking exams: every c= code below was taken from your own Oliveboard links
+    "ibpsrrbasp": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbasp&testid={test_id}",
     "rrbpre": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbscp&testid={test_id}",
+    "rrbpo": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbscp&testid={test_id}",
+    "sbiclerkpre2020": "https://u1.oliveboard.in/exams/tests/?c=sbiclerkpre2020&testid={test_id}",
+    "sbiclerkpre2022": "https://u1.oliveboard.in/exams/tests/?c=sbiclerkpre2022&testid={test_id}",
+    "sbiclerkmain": "https://u1.oliveboard.in/exams/tests/?c=sbiclerkmain&testid={test_id}",
+    "ibpsclerkmain": "https://u1.oliveboard.in/exams/tests/?c=ibpsclerkmain&testid={test_id}",
+    "rrbassecpre": "https://u1.oliveboard.in/exams/tests/?c=rrbassecpre&testid={test_id}",
+    "ibpsrrbassmains": "https://u1.oliveboard.in/exams/tests/combined.php?c=ibpsrrbsecas&os=1&testid={test_id}",
+    "ibpsrrbscmen": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbscmen&testid={test_id}",
+    "ibpsrrbscmhi": "https://u1.oliveboard.in/exams/tests/?c=ibpsrrbscmhi&testid={test_id}",
+    "ibpsrrbsec": "https://u1.oliveboard.in/exams/tests/combined.php?c=ibpsrrbsec&os=1&testid={test_id}",
+    "rrbclerksectional": "https://u1.oliveboard.in/exams/tests/?c=sectional&testid={test_id}",
+    "rrbmainssec": "https://u1.oliveboard.in/exams/tests/?c=sectionalm&testid={test_id}",
+    "engtests": "https://u1.oliveboard.in/exams/tests/?c=engtests&testid={test_id}",
+    "sbiclsecmains": "https://u1.oliveboard.in/exams/tests/nocw.php?c=sbiclsecmains&os=1&testid={test_id}",
+    "sbiclsecpre": "https://u1.oliveboard.in/exams/tests/?c=sbiclsecpre&testid={test_id}",
 }
 
 def get_page(url):
@@ -114,13 +115,16 @@ def file_name_for(html, exam, test_id):
 
 
 def _page_url(url):
-    """Test page address for a test or solution link."""
+    """Test page address for a test, part.php or solution link."""
     q = parse_qs(urlparse(url).query)
     c = q.get("c", [""])[0]
     t = q.get("testid", [""])[0]
     path = urlparse(url).path.rstrip("/")
-    if path == "/exams/tests" or not c or not t:
+    if not c or not t or path.endswith(("/exams/tests", "/combined.php", "/nocw.php")):
         return url
+    for tpl in BASE_URIS.values():
+        if re.search(r"[?&]c=" + re.escape(c) + r"(&|$)", tpl):
+            return tpl.format(test_id=t)
     return f"https://u1.oliveboard.in/exams/tests/?c={c}&testid={t}"
 
 
@@ -406,8 +410,6 @@ def parse_solution(sol_html):
         if len(parts) < 3 or not parts[2].isdigit():
             continue
         m = re.search(r"viewsolution\((\d+),\s*(\d+)\)", str(b))
-        if not m:
-            continue
         qb = b.select_one(".qblock")
         dr = b.select_one(".panetxt")
         sl = b.select_one(".solutiontxt")
@@ -417,10 +419,22 @@ def parse_solution(sol_html):
             "q": _dec(qb.get_text()) if qb else "",
             "dir": _dec(dr.get_text()) if dr else "",
             "opts": [_dec(o.get_text()) for o in b.select(".rightopt")],
-            "key": int(m.group(2)) + 1,
+            "key": (int(m.group(2)) + 1) if m else 0,
             "sol": _dec(sl.get_text()) if sl else "",
         })
     return items
+
+
+def parse_solution_sections(sol_html):
+    """Section names and question counts as the solution page groups them."""
+    soup = BeautifulSoup(sol_html, "html.parser")
+    out = []
+    for box in soup.select(".question-map > .box"):
+        n = len(box.select(".map-qno"))
+        if n:
+            nm = box.find("b")
+            out.append({"name": nm.get_text(" ", strip=True) if nm else f"Section {len(out) + 1}", "n": n})
+    return out
 
 
 def parse_sections(test_html):
@@ -473,9 +487,21 @@ def build_part(test_html, idx, secs, shorts, items):
 
     sub1(r"totalTime\s*=\s*'\d*'", f"totalTime='{sec['minutes'] * 60}'")
     sub1(r"timeTotal\s*=\s*'[^']*'", f"timeTotal='{sec['minutes']} Minutes'")
-    sub1(r"secList\.push\(\s*(['\"])[^'\"]*\1\s*\)", "secList.push(" + json.dumps(sec["name"]) + ")")
-    sub1(r"secTracker\.push\(\s*['\"]\d*['\"]\s*\)", f"secTracker.push('{sec['n']}')")
-    sub1(r"secShortList\.push\(\s*(['\"])[^'\"]*\1\s*\)", "secShortList.push(" + json.dumps(shorts[idx] if idx < len(shorts) else sec["name"][:2]) + ")")
+    def only_one(pattern, repl):
+        nonlocal raw
+        seen = []
+
+        def f(m):
+            seen.append(1)
+            return repl if len(seen) == 1 else ""
+
+        raw = re.sub(pattern, f, raw)
+        if not seen:
+            raise ValueError("test page format changed: " + pattern)
+
+    only_one(r"secList\.push\(\s*(['\"])[^'\"]*\1\s*\)\s*;?", "secList.push(" + json.dumps(sec["name"]) + ");")
+    only_one(r"secTracker\.push\(\s*['\"]\d*['\"]\s*\)\s*;?", f"secTracker.push('{sec['n']}');")
+    only_one(r"secShortList\.push\(\s*(['\"])[^'\"]*\1\s*\)\s*;?", "secShortList.push(" + json.dumps(shorts[idx] if idx < len(shorts) else sec["name"][:2]) + ");")
     sub1(r"firstQid\s*=\s*\d+", f"firstQid={mine[0]['qid']}")
     sub1(r"\bnq\s*=\s*\d+", f"nq={len(mine)}")
 
@@ -610,7 +636,7 @@ function show(){
   var S=DATA.secs,sr=S.map(function(s){return {name:s.name,n:s.n,max:s.marks,c:0,w:0,u:0,sc:0,t:0};});
   var T={c:0,w:0,u:0,sc:0,max:0,t:0},no=[];
   DATA.items.forEach(function(it){
-    var s=S[it.s],per=s.marks/s.n,a=ans[it.qid]||0,st=!a?'u':(a===it.key?'c':'w'),r=sr[it.s];
+    var s=S[it.s],per=s.marks/s.n,a=ans[it.qid]||0,st=(!a||!it.key)?'u':(a===it.key?'c':'w'),r=sr[it.s];
     it.st=st;it.a=a;it.t=tm[it.qid]||0;no[it.s]=(no[it.s]||0)+1;it.no=no[it.s];
     if(st==='c'){r.c++;r.sc+=per;}else if(st==='w'){r.w++;r.sc-=per*DATA.neg;}else{r.u++;}
     r.t+=it.t;
@@ -629,7 +655,7 @@ function show(){
   h+='</table><div class="flt"><button class="on" data-f="all">All</button><button data-f="w">Wrong</button><button data-f="u">Unattempted</button><button data-f="c">Correct</button></div><div id="list">';
   var L='ABCDEFGH',lastDir=-2;
   DATA.items.forEach(function(it){
-    h+='<div class="it '+it.st+'" data-st="'+it.st+'"><div class="ih"><b>Q'+it.no+'</b><span class="chip">'+(it.st==='c'?'Correct':it.st==='w'?'Wrong':'Skipped')+'</span><span class="meta">'+S[it.s].name+' &middot; '+fmt(it.t)+'</span></div>';
+    h+='<div class="it '+it.st+'" data-st="'+it.st+'"><div class="ih"><b>Q'+it.no+'</b><span class="chip">'+(!it.key?'No key':it.st==='c'?'Correct':it.st==='w'?'Wrong':'Skipped')+'</span><span class="meta">'+S[it.s].name+' &middot; '+fmt(it.t)+'</span></div>';
     if(it.d>=0){h+='<details'+(it.d!==lastDir?' open':'')+'><summary>Directions</summary><div class="dirb">'+DATA.dirs[it.d]+'</div></details>';}
     lastDir=it.d;
     h+='<div class="iq">'+it.q+'</div>';
@@ -657,16 +683,31 @@ load(0);
 
 def build_combined(part1_page, sol_html, url):
     """One HTML file: section 1 (original page) -> section 2 ... -> result page. Works offline."""
-    secs = parse_sections(part1_page)
+    table = parse_sections(part1_page)
     items = parse_solution(sol_html)
-    if not secs:
-        nqm = re.search(r"\bnq\s*=\s*(\d+)", part1_page)
-        ttm = re.search(r"totalTime\s*=\s*'(\d+)'", part1_page)
-        if nqm:
-            n = int(nqm.group(1))
-            secs = [{"name": "Section 1", "n": n, "marks": float(n), "minutes": (int(ttm.group(1)) // 60) if ttm else 0}]
-    if not secs or len(items) != sum(s["n"] for s in secs):
-        raise ValueError("solution does not match the test sections")
+    ssecs = parse_solution_sections(sol_html)
+    ttm = re.search(r"totalTime\s*=\s*'(\d+)'", part1_page)
+    base_min = (int(ttm.group(1)) // 60) if ttm else 0
+    if ssecs and sum(x["n"] for x in ssecs) == len(items):
+        secs = []
+        for i, x in enumerate(ssecs):
+            t = table[i] if i < len(table) and table[i]["n"] == x["n"] else None
+            secs.append({"name": x["name"], "n": x["n"], "marks": t["marks"] if t else float(x["n"]), "minutes": t["minutes"] if t else 0})
+        for x in secs:
+            if not x["minutes"]:
+                x["minutes"] = max(1, round(base_min * x["n"] / secs[0]["n"])) if base_min else max(1, x["n"] // 2)
+    else:
+        secs = table
+        if not secs:
+            nqm = re.search(r"\bnq\s*=\s*(\d+)", part1_page)
+            if nqm:
+                n = int(nqm.group(1))
+                secs = [{"name": "Section 1", "n": n, "marks": float(n), "minutes": base_min}]
+    if not secs or len(items) != sum(x["n"] for x in secs):
+        raise ValueError(
+            f"solution mein {len(items)} questions mile, test ki table se {sum(x['n'] for x in secs)} "
+            f"(sections: {', '.join(x['name'] + '=' + str(x['n']) for x in secs) or 'koi nahi'})"
+        )
     sm = re.search(r"ssnames\s*=\s*(\[[^\]]*\])", sol_html)
     try:
         shorts = json.loads(sm.group(1)) if sm else []
