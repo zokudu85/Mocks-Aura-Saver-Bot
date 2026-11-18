@@ -82,9 +82,52 @@ BASE_URIS = {
     "sbiclsecpre": "https://u1.oliveboard.in/exams/tests/?c=sbiclsecpre&testid={test_id}",
 }
 
+def _is_olive(url):
+    h = urlparse(url).netloc.lower().split(":")[0]
+    return h == "oliveboard.in" or h.endswith(".oliveboard.in")
+
+
 def get_page(url):
-    """Blocking GET (run in a thread so the bot stays responsive)."""
-    return requests.get(url, headers=HEADERS, timeout=30)
+    """Blocking GET with your cookie. Redirects are followed only inside oliveboard.in,
+    so the cookie never goes to any other site."""
+    r = None
+    for _ in range(6):
+        if not _is_olive(url):
+            break
+        headers = dict(HEADERS)
+        headers["Host"] = urlparse(url).netloc
+        r = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
+        loc = r.headers.get("Location") if getattr(r, "is_redirect", False) else None
+        if not loc:
+            return r
+        url = urljoin(url, loc)
+    if r is not None:
+        r.url = url  # where it wanted to go (not followed)
+    return r
+
+
+@bot.on(events.NewMessage(pattern=r"/raw (https://\S+)"))
+async def raw_page(event):
+    """/raw <any oliveboard.in link> -> the page exactly as the server sent it (no changes), as a file."""
+    if event.sender_id != OWNER_ID:
+        await event.reply("Not allowed")
+        return
+    url = event.pattern_match.group(1)
+    if not _is_olive(url):
+        await event.respond("Sirf oliveboard.in ke links chalte hain.")
+        return
+    try:
+        r = await asyncio.to_thread(get_page, url)
+    except requests.exceptions.RequestException as e:
+        await event.respond(f"Failed: {e}")
+        return
+    path = f"raw_{event.id}.html"
+    with open(path, "wb") as f:
+        f.write(r.content)
+    try:
+        await event.respond(f"Status {r.status_code}\nFinal: {r.url}", file=path)
+    finally:
+        os.remove(path)
 
 
 # Optional: your own test names. Key = "exam testid" exactly as in /fetch (or "c testid" from a /url link).
@@ -128,6 +171,46 @@ def _page_url(url):
     return f"https://u1.oliveboard.in/exams/tests/?c={c}&testid={t}"
 
 
+def _test_page_candidates(url):
+    q = parse_qs(urlparse(url).query)
+    c = q.get("c", [""])[0]
+    t = q.get("testid", [""])[0]
+    cands = [_page_url(url)]
+    if c and t:
+        base = "https://u1.oliveboard.in/exams/tests/"
+        for u in (
+            f"{base}part.php?c={c}&testid={t}&from=test",
+            f"{base}part.php?c={c}&testid={t}",
+            f"{base}?c={c}&testid={t}",
+            f"{base}combined.php?c={c}&os=1&testid={t}",
+            f"{base}nocw.php?c={c}&os=1&testid={t}",
+            f"{base}part2c1.php?c={c}&testid={t}&from=test",
+        ):
+            if u not in cands:
+                cands.append(u)
+    return cands
+
+
+def _is_test_page(text):
+    return bool(re.search(r"firstQid\s*=\s*\d+", text) and re.search(r"secList\.push", text))
+
+
+def fetch_test_page(url):
+    """Blocking: the first address that really returns a test page. Returns (response or None, tried list)."""
+    tried = []
+    for u in _test_page_candidates(url):
+        r = get_page(u)
+        if r is None:
+            continue
+        ok = urlparse(r.url).netloc == "u1.oliveboard.in" and _is_test_page(r.text)
+        tried.append((urlparse(u).path.rsplit("/", 1)[-1] or "tests/", r.status_code, len(r.text) // 1024))
+        if ok:
+            return r, tried
+        if urlparse(r.url).netloc != "u1.oliveboard.in":
+            return r, tried  # sent to the login page
+    return None, tried
+
+
 async def send_test(event, url, caption, exam, test_id):
     """Attempted test -> ONE offline HTML (all sections + result page) that never sends anything to Oliveboard."""
     su = solution_url(url)
@@ -146,10 +229,16 @@ async def send_test(event, url, caption, exam, test_id):
     have_sol = "questionssols" in sol.text
 
     try:
-        response = await asyncio.to_thread(get_page, _page_url(url))
-        response.raise_for_status()
+        response, tried = await asyncio.to_thread(fetch_test_page, url)
     except requests.exceptions.RequestException as e:
         await event.respond(f"Failed to fetch test {test_id}: {e}")
+        return "fail"
+    if response is None:
+        seen = ", ".join(f"{p} ({code}, {kb} KB)" for p, code, kb in tried) or "kuch nahi"
+        await event.respond(
+            f"Test {test_id}: test page nahi mila. Ye pages try kiye: {seen}. "
+            "Is test ka link /raw se bhejo (/raw <link>) aur wo file mujhe dikhao."
+        )
         return "fail"
     if urlparse(response.url).netloc != "u1.oliveboard.in":
         await event.respond("Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
@@ -270,17 +359,34 @@ WATERMARK_HTML = """<style>
 LAYOUT_STYLE = """<style id="stack-layout">
 html.m-stack,html.m-stack body{height:auto !important;overflow:auto !important}
 html.m-stack #left-container-post,html.m-stack #question-outer-pane,html.m-stack #question-inner-pane{height:auto !important;max-height:none !important;overflow:visible !important}
+html.m-stack #question-outer-pane{position:relative !important;top:auto !important;min-height:0 !important;padding-bottom:10px !important}
+html.m-stack #section-name-container,html.m-stack #question-no-bar,html.m-stack #main-back-button,html.m-stack #instructions-onbutton,html.m-stack #question-list-onbutton,html.m-stack #candidate-details-onbutton{position:static !important;height:auto !important;max-height:none !important}
+html.m-stack #button-holder{position:static !important;float:none !important;width:100% !important;height:auto !important;margin:12px 0 !important;box-sizing:border-box !important;text-align:center}
 html.m-stack .leftpane,html.m-stack .rightpane{float:none !important;width:100% !important;height:auto !important;max-height:none !important;overflow:visible !important;box-sizing:border-box !important}
 html.m-stack .leftpane{margin-bottom:12px !important;border-right:0 !important}
 html.m-stack .rightpane{border-left:0 !important}
 html.m-stack .leftpane img,html.m-stack .rightpane img{max-width:100% !important;height:auto !important}
 </style>
 <script>
-(function(){try{if(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"")){document.documentElement.classList.add("m-stack");}}catch(e){}})();
+(function(){try{
+if(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"")){
+document.documentElement.classList.add("m-stack");
+var ids=["left-container-post","question-outer-pane"];
+var fix=function(){ids.forEach(function(id){var p=document.getElementById(id);if(!p)return;
+Array.prototype.forEach.call(p.children,function(el){
+if(el.id==="hover-con"||el.tagName==="SCRIPT")return;
+var ps=getComputedStyle(el).position;
+if(ps==="absolute"||ps==="fixed"){
+el.style.setProperty("position","static","important");
+el.style.setProperty("float","none","important");
+el.style.setProperty("height","auto","important");
+}});});};
+document.addEventListener("DOMContentLoaded",fix);
+setInterval(fix,600);
+}
+}catch(e){}})();
 </script>
 """
-
-
 # Safety: the test page can never send anything (answers, timings) anywhere. Only GET downloads
 # of Oliveboard's own scripts/images/styles are left, so the page still looks the same.
 GUARD_HTML = """<script>
@@ -611,13 +717,14 @@ function collect(w,i){
 function showBasic(){
   F.style.display='none';R.style.display='block';document.getElementById('wm').style.display='flex';
   document.body.style.background='#f3f6fb';window.scrollTo(0,0);
-  var S=DATA.secs,tot=0,att=0,tt=0,rows='';
-  results.forEach(function(r,i){
-    var n=S[i]?S[i].n:Object.keys(r.ans).length,a=0,t=0,k;
-    for(k in r.ans){if(r.ans[k])a++;}
-    for(k in r.time){t+=r.time[k];}
-    tot+=n;att+=a;tt+=t;
-    rows+='<tr><td>'+(S[i]?S[i].name:'Section '+(i+1))+'</td><td>'+n+'</td><td>'+a+'</td><td>'+(n-a)+'</td><td>'+fmt(t)+'</td></tr>';
+  var S=DATA.secs,ans={},tm={},k;
+  results.forEach(function(r){for(k in r.ans)ans[k]=r.ans[k];for(k in r.time)tm[k]=r.time[k];});
+  var qs=Object.keys(ans).map(Number).sort(function(a,b){return a-b;}),pos=0,tot=0,att=0,tt=0,rows='';
+  S.forEach(function(s){
+    var a=0,t=0,part=qs.slice(pos,pos+s.n);pos+=s.n;
+    part.forEach(function(q){if(ans[q])a++;t+=tm[q]||0;});
+    tot+=s.n;att+=a;tt+=t;
+    rows+='<tr><td>'+s.name+'</td><td>'+s.n+'</td><td>'+a+'</td><td>'+(s.n-a)+'</td><td>'+fmt(t)+'</td></tr>';
   });
   R.innerHTML='<h1>'+DATA.title+'</h1><div class="sub">Test summary</div><div class="cards">'+
    '<div class="card c-sc"><span>Attempted</span><b>'+att+' / '+tot+'</b></div>'+
@@ -758,17 +865,24 @@ def _wrap(pages, data, title):
 
 def build_basic(part1_page, url):
     """No solution available yet: offline file with the questions only (no answer key)."""
-    secs = parse_sections(part1_page)
+    table = parse_sections(part1_page)
     nqm = re.search(r"\bnq\s*=\s*(\d+)", part1_page)
     ttm = re.search(r"totalTime\s*=\s*'(\d+)'", part1_page)
     n = int(nqm.group(1)) if nqm else 0
-    if secs and secs[0]["n"] == n:
-        sec = secs[0]
+    names = [m[1] for m in re.findall(r"secList\.push\(\s*(['\"])([^'\"]*)\1", part1_page)]
+    counts = [int(c) for c in re.findall(r"secTracker\.push\(\s*['\"](\d+)['\"]", part1_page)]
+    if names and len(names) == len(counts) and sum(counts) == n:
+        secs = []
+        for i, (nm, c) in enumerate(zip(names, counts)):
+            t = table[i] if i < len(table) and table[i]["n"] == c else None
+            secs.append({"name": nm, "n": c, "marks": t["marks"] if t else float(c), "minutes": t["minutes"] if t else 0})
+    elif table and table[0]["n"] == n:
+        secs = [table[0]]
     else:
-        sec = {"name": "Section 1", "n": n, "marks": float(n), "minutes": (int(ttm.group(1)) // 60) if ttm else 0}
+        secs = [{"name": "Section 1", "n": n, "marks": float(n), "minutes": (int(ttm.group(1)) // 60) if ttm else 0}]
     tm = re.search(r"testQpid\s*=\s*'([^']*)'", part1_page)
     title = tm.group(1) if tm and tm.group(1) else "Mock Test"
-    data = {"title": htmllib.escape(title), "neg": NEGATIVE_MARK, "secs": [sec], "dirs": [], "items": []}
+    data = {"title": htmllib.escape(title), "neg": NEGATIVE_MARK, "secs": secs, "dirs": [], "items": []}
     return _wrap([modify_html(part1_page, url)], data, title)
 
 
