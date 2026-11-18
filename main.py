@@ -226,7 +226,7 @@ async def send_test(event, url, caption, exam, test_id):
     if urlparse(sol.url).netloc != "u1.oliveboard.in":
         await event.respond("Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
         return "login"
-    have_sol = "questionssols" in sol.text
+    have_sol = bool(await asyncio.to_thread(parse_solution, sol.text))
 
     try:
         response, tried = await asyncio.to_thread(fetch_test_page, url)
@@ -245,16 +245,22 @@ async def send_test(event, url, caption, exam, test_id):
         return "login"
 
     note = ""
-    try:
-        if have_sol:
+    html = None
+    if have_sol:
+        try:
             html = await asyncio.to_thread(build_combined, response.text, sol.text, url)
-        else:
+        except Exception as e:
+            print("combined failed:", repr(e))
+            note = f"\n\n⚠️ Solution page se poori file nahi ban payi ({e}). Isliye sirf questions wali file bheji hai."
+    if html is None:
+        try:
             html = await asyncio.to_thread(build_basic, response.text, url)
+        except Exception as e:
+            print("build failed:", repr(e))
+            await event.respond(f"Test {test_id}: offline file nahi ban payi ({e}).")
+            return "fail"
+        if not note:
             note = "\n\n⚠️ Solution abhi nahi mila: file mein sirf questions hain (answers/solution nahi). Sectional test ho toh sirf section 1. Test Oliveboard par attempt karke dobara /fetch karo, tab poori file banegi."
-    except Exception as e:
-        print("build failed:", repr(e))
-        await event.respond(f"Test {test_id}: offline file nahi ban payi ({e}).")
-        return "fail"
 
     title = test_title(response.text, exam, test_id)
     file_name = f"{title}@Dark_V1rus.html"
