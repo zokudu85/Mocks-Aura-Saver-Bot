@@ -13,6 +13,26 @@ from telethon import TelegramClient, events
 
 from config import API_ID, API_HASH, BOT_TOKEN, COOKIES, OWNER_ID
 
+
+def _parse_ids(text):
+    out = set()
+    for p in re.split(r"[,\s]+", text or ""):
+        try:
+            out.add(int(p))
+        except ValueError:
+            pass
+    return out
+
+
+# Chats (channels/groups) where the bot also obeys, e.g. your private channel: ALLOWED_CHATS=-1001234567890
+ALLOWED_CHATS = _parse_ids(os.getenv("ALLOWED_CHATS", ""))
+
+
+def allowed(event):
+    """You (OWNER_ID) anywhere, or anyone posting in a chat listed in ALLOWED_CHATS."""
+    return event.sender_id == OWNER_ID or event.chat_id in ALLOWED_CHATS
+
+
 # Initialize the Telethon client
 bot = TelegramClient("olive_bot", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
@@ -109,7 +129,7 @@ def get_page(url):
 @bot.on(events.NewMessage(pattern=r"/raw (https://\S+)"))
 async def raw_page(event):
     """/raw <any oliveboard.in link> -> the page exactly as the server sent it (no changes), as a file."""
-    if event.sender_id != OWNER_ID:
+    if not allowed(event):
         await event.reply("Not allowed")
         return
     url = event.pattern_match.group(1)
@@ -274,7 +294,7 @@ async def send_test(event, url, caption, exam, test_id):
     return "ok"
 
 
-MAX_TESTS = 30     # max tests per /fetch command
+MAX_TESTS = 40     # max tests per /fetch command
 GAP_SECONDS = 2    # pause between tests (keeps Telegram and your Oliveboard account safe)
 
 
@@ -294,7 +314,7 @@ def parse_ids(text):
 @bot.on(events.NewMessage(pattern=r"/fetch (\w+) ([\d,\s-]+)"))
 async def fetch_exam(event):
     """/fetch exam 1   or   /fetch exam 1,2,3   or   /fetch exam 1-6"""
-    if event.sender_id != OWNER_ID:
+    if not allowed(event):
         await event.reply("Not allowed")
         return
     exam = event.pattern_match.group(1).lower()
@@ -338,7 +358,7 @@ async def fetch_exam(event):
 @bot.on(events.NewMessage(pattern=r"/url (https://u1\.oliveboard\.in/\S+)"))
 async def fetch_url(event):
     """Fetches the question paper from a full Oliveboard test link."""
-    if event.sender_id != OWNER_ID:
+    if not allowed(event):
         await event.reply("Not allowed")
         return
     url = event.pattern_match.group(1)
@@ -368,7 +388,9 @@ html.m-stack #left-container-post,html.m-stack #question-outer-pane,html.m-stack
 html.m-stack #question-outer-pane{position:relative !important;top:auto !important;min-height:0 !important;padding-bottom:10px !important}
 html.m-stack #section-name-container,html.m-stack #question-no-bar,html.m-stack #main-back-button,html.m-stack #instructions-onbutton,html.m-stack #question-list-onbutton,html.m-stack #candidate-details-onbutton{position:static !important;height:auto !important;max-height:none !important}
 html.m-stack #button-holder{position:static !important;float:none !important;width:100% !important;height:auto !important;margin:12px 0 !important;box-sizing:border-box !important;text-align:center}
-html.m-stack .leftpane,html.m-stack .rightpane{float:none !important;width:100% !important;height:auto !important;max-height:none !important;overflow:visible !important;box-sizing:border-box !important}
+html.m-stack #question-inner-pane{position:relative !important}
+html.m-stack .question-outer-div,html.m-stack [id^="myquestion"],html.m-stack [id^="myanswer"],html.m-stack [id^="rightpane-answer"]{position:static !important;float:none !important;width:100% !important;left:auto !important;right:auto !important;top:auto !important;margin-left:0 !important;margin-right:0 !important;box-sizing:border-box !important}
+html.m-stack .leftpane,html.m-stack .rightpane{position:static !important;left:auto !important;right:auto !important;top:auto !important;margin-left:0 !important;margin-right:0 !important;float:none !important;width:100% !important;height:auto !important;max-height:none !important;overflow:visible !important;box-sizing:border-box !important}
 html.m-stack .leftpane{margin-bottom:12px !important;border-right:0 !important}
 html.m-stack .rightpane{border-left:0 !important}
 html.m-stack .leftpane img,html.m-stack .rightpane img{max-width:100% !important;height:auto !important}
@@ -378,17 +400,22 @@ html.m-stack .leftpane img,html.m-stack .rightpane img{max-width:100% !important
 if(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||"")){
 document.documentElement.classList.add("m-stack");
 var ids=["left-container-post","question-outer-pane"];
-var fix=function(){ids.forEach(function(id){var p=document.getElementById(id);if(!p)return;
-Array.prototype.forEach.call(p.children,function(el){
+var flip=function(el){
 if(el.id==="hover-con"||el.tagName==="SCRIPT")return;
 var ps=getComputedStyle(el).position;
 if(ps==="absolute"||ps==="fixed"){
 el.style.setProperty("position","static","important");
 el.style.setProperty("float","none","important");
 el.style.setProperty("height","auto","important");
-}});});};
+el.style.setProperty("left","auto","important");
+el.style.setProperty("top","auto","important");
+el.style.setProperty("margin-left","0","important");
+}};
+var fix=function(){ids.forEach(function(id){var p=document.getElementById(id);if(!p)return;
+Array.prototype.forEach.call(p.children,flip);});
+Array.prototype.forEach.call(document.querySelectorAll(".question-outer-div,.leftpane,.rightpane,[id^=myquestion],[id^=myanswer],[id^=rightpane-answer]"),flip);};
 document.addEventListener("DOMContentLoaded",fix);
-setInterval(fix,600);
+setInterval(fix,1000);
 }
 }catch(e){}})();
 </script>
@@ -449,7 +476,7 @@ def modify_html(html, full_url):
 @bot.on(events.NewMessage(pattern=r"/codes(?: (https://u1\.oliveboard\.in/\S+))?"))
 async def list_codes(event):
     """/codes  or  /codes <any Oliveboard list page link>  -> every exam code (c=) found on that page."""
-    if event.sender_id != OWNER_ID:
+    if not allowed(event):
         await event.reply("Not allowed")
         return
     url = event.pattern_match.group(1) or "https://u1.oliveboard.in/tests/index.php?c=tests&i=banking"
