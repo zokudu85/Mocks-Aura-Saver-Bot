@@ -33,6 +33,29 @@ def allowed(event):
     return event.sender_id == OWNER_ID or event.chat_id in ALLOWED_CHATS
 
 
+# Error / status messages remove themselves after this many seconds (0 = keep them). Files are never deleted.
+try:
+    NOTICE_SECONDS = int(os.getenv("NOTICE_SECONDS", "20") or 0)
+except ValueError:
+    NOTICE_SECONDS = 20
+
+
+async def _delete_later(m):
+    try:
+        await asyncio.sleep(NOTICE_SECONDS)
+        await m.delete()
+    except Exception:
+        pass
+
+
+async def notice(event, text, reply=False):
+    """Send a short status/error message that deletes itself after NOTICE_SECONDS."""
+    m = await (event.reply(text) if reply else event.respond(text))
+    if NOTICE_SECONDS > 0 and m is not None:
+        asyncio.create_task(_delete_later(m))
+    return m
+
+
 # Initialize the Telethon client
 bot = TelegramClient("olive_bot", API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
@@ -100,6 +123,10 @@ BASE_URIS = {
     "engtests": "https://u1.oliveboard.in/exams/tests/?c=engtests&testid={test_id}",
     "sbiclsecmains": "https://u1.oliveboard.in/exams/tests/nocw.php?c=sbiclsecmains&os=1&testid={test_id}",
     "sbiclsecpre": "https://u1.oliveboard.in/exams/tests/?c=sbiclsecpre&testid={test_id}",
+    "sbipo": "https://u1.oliveboard.in/exams/tests/?c=sbipo&testid={test_id}",
+    "sbipopre19": "https://u1.oliveboard.in/exams/tests/?c=sbipopre19&testid={test_id}",
+    "sbiposecpre": "https://u1.oliveboard.in/exams/tests/?c=sbiposecpre&testid={test_id}",
+    "sbiposecmains": "https://u1.oliveboard.in/exams/tests/nocw.php?c=sbiposecmains&os=1&testid={test_id}",
 }
 
 def _is_olive(url):
@@ -130,16 +157,16 @@ def get_page(url):
 async def raw_page(event):
     """/raw <any oliveboard.in link> -> the page exactly as the server sent it (no changes), as a file."""
     if not allowed(event):
-        await event.reply("Not allowed")
+        await notice(event, "Not allowed", reply=True)
         return
     url = event.pattern_match.group(1)
     if not _is_olive(url):
-        await event.respond("Sirf oliveboard.in ke links chalte hain.")
+        await notice(event, "Sirf oliveboard.in ke links chalte hain.")
         return
     try:
         r = await asyncio.to_thread(get_page, url)
     except requests.exceptions.RequestException as e:
-        await event.respond(f"Failed: {e}")
+        await notice(event, f"Failed: {e}")
         return
     path = f"raw_{event.id}.html"
     with open(path, "wb") as f:
@@ -235,33 +262,34 @@ async def send_test(event, url, caption, exam, test_id):
     """Attempted test -> ONE offline HTML (all sections + result page) that never sends anything to Oliveboard."""
     su = solution_url(url)
     if not su:
-        await event.respond("Link mein c= aur testid= chahiye.")
+        await notice(event, "Link mein c= aur testid= chahiye.")
         return "fail"
     try:
         sol = await asyncio.to_thread(get_page, su)
         sol.raise_for_status()
     except requests.exceptions.RequestException as e:
-        await event.respond(f"Failed to fetch test {test_id}: {e}")
+        await notice(event, f"Failed to fetch test {test_id}: {e}")
         return "fail"
     if urlparse(sol.url).netloc != "u1.oliveboard.in":
-        await event.respond("Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
+        await notice(event, "Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
         return "login"
     have_sol = bool(await asyncio.to_thread(parse_solution, sol.text))
 
     try:
         response, tried = await asyncio.to_thread(fetch_test_page, url)
     except requests.exceptions.RequestException as e:
-        await event.respond(f"Failed to fetch test {test_id}: {e}")
+        await notice(event, f"Failed to fetch test {test_id}: {e}")
         return "fail"
     if response is None:
-        seen = ", ".join(f"{p} ({code}, {kb} KB)" for p, code, kb in tried) or "kuch nahi"
-        await event.respond(
-            f"Test {test_id}: test page nahi mila. Ye pages try kiye: {seen}. "
-            "Is test ka link /raw se bhejo (/raw <link>) aur wo file mujhe dikhao."
+        await notice(
+            event,
+            f"Test {test_id}: Oliveboard ne asli test page nahi diya (khali page aaya). "
+            "Exam code ya test number galat ho sakta hai, ya ye test aapke account mein khula nahi hai. "
+            "Pehle wahi test browser mein khol ke dekho. Khulta hai toh /raw <link> se file bhejo.",
         )
         return "fail"
     if urlparse(response.url).netloc != "u1.oliveboard.in":
-        await event.respond("Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
+        await notice(event, "Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
         return "login"
 
     note = ""
@@ -277,7 +305,7 @@ async def send_test(event, url, caption, exam, test_id):
             html = await asyncio.to_thread(build_basic, response.text, url)
         except Exception as e:
             print("build failed:", repr(e))
-            await event.respond(f"Test {test_id}: offline file nahi ban payi ({e}).")
+            await notice(event, f"Test {test_id}: offline file nahi ban payi ({e}).")
             return "fail"
         if not note:
             note = "\n\n⚠️ Solution abhi nahi mila: file mein sirf questions hain (answers/solution nahi). Sectional test ho toh sirf section 1. Test Oliveboard par attempt karke dobara /fetch karo, tab poori file banegi."
@@ -294,7 +322,7 @@ async def send_test(event, url, caption, exam, test_id):
     return "ok"
 
 
-MAX_TESTS = 40     # max tests per /fetch command
+MAX_TESTS = 30     # max tests per /fetch command
 GAP_SECONDS = 2    # pause between tests (keeps Telegram and your Oliveboard account safe)
 
 
@@ -315,19 +343,19 @@ def parse_ids(text):
 async def fetch_exam(event):
     """/fetch exam 1   or   /fetch exam 1,2,3   or   /fetch exam 1-6"""
     if not allowed(event):
-        await event.reply("Not allowed")
+        await notice(event, "Not allowed", reply=True)
         return
     exam = event.pattern_match.group(1).lower()
     ids = parse_ids(event.pattern_match.group(2))
 
     if exam not in BASE_URIS:
-        await event.respond("Invalid exam type! Supported types are: " + ", ".join(BASE_URIS.keys()))
+        await notice(event, "Invalid exam type! Supported types are: " + ", ".join(BASE_URIS.keys()))
         return
     if not ids:
-        await event.respond("Test ID sahi likho, jaise: `/fetch " + exam + " 1,2,3` ya `/fetch " + exam + " 1-6`")
+        await notice(event, "Test ID sahi likho, jaise: `/fetch " + exam + " 1,2,3` ya `/fetch " + exam + " 1-6`")
         return
     if len(ids) > MAX_TESTS:
-        await event.respond(f"Ek baar mein max {MAX_TESTS} tests. Pehle {MAX_TESTS} bhej raha hoon.")
+        await notice(event, f"Ek baar mein max {MAX_TESTS} tests. Pehle {MAX_TESTS} bhej raha hoon.")
         ids = ids[:MAX_TESTS]
 
     done, failed = [], []
@@ -359,7 +387,7 @@ async def fetch_exam(event):
 async def fetch_url(event):
     """Fetches the question paper from a full Oliveboard test link."""
     if not allowed(event):
-        await event.reply("Not allowed")
+        await notice(event, "Not allowed", reply=True)
         return
     url = event.pattern_match.group(1)
     caption = "**📕 Test Name: {test_name}**\n**✅ Type: Offline mock + result**\n\n__**Powered by Banking Aura**__"
@@ -477,17 +505,17 @@ def modify_html(html, full_url):
 async def list_codes(event):
     """/codes  or  /codes <any Oliveboard list page link>  -> every exam code (c=) found on that page."""
     if not allowed(event):
-        await event.reply("Not allowed")
+        await notice(event, "Not allowed", reply=True)
         return
     url = event.pattern_match.group(1) or "https://u1.oliveboard.in/tests/index.php?c=tests&i=banking"
     try:
         r = await asyncio.to_thread(get_page, url)
         r.raise_for_status()
     except requests.exceptions.RequestException as e:
-        await event.respond(f"Failed: {e}")
+        await notice(event, f"Failed: {e}")
         return
     if urlparse(r.url).netloc != "u1.oliveboard.in":
-        await event.respond("Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
+        await notice(event, "Login page aaya. Cookies expire ho gayi hain, naya AUTH_CODE daalo.")
         return
     soup = BeautifulSoup(r.text, "html.parser")
     found = {}
@@ -499,7 +527,7 @@ async def list_codes(event):
         if c != "tests":
             found.setdefault(c, "")
     if not found:
-        await event.respond("Is page par koi c= code nahi mila. Doosra list page ka link do: /codes <link>")
+        await notice(event, "Is page par koi c= code nahi mila. Doosra list page ka link do: /codes <link>")
         return
     lines = ["# c= codes found on: " + url, ""]
     lines += [f"{c}   {name}".rstrip() for c, name in found.items()]
